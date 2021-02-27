@@ -32,6 +32,8 @@ To specify the model, use the following command:
 For help, type
 
     python train.py --help
+    
+
 ***Abstract—The importance of sustainable design is increasing. Through deep convolutional neural network, we imagined the world where everything is organic, and thus perishes.<br>
 A deep neural network was trained to predict the "decayed" appearance of an arbitrary input image.<br>
 A dataset that consists of several hundred images of fresh/rotten apples, oranges, and bananas were used to train the neural network.
