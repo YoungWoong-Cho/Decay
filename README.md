@@ -4,7 +4,7 @@
 
 <blockquote> Our project began with the question, <i>“what if inorganic things <u>‘decay’</u> like organic things?”</i> </blockquote><br>
 
-### TL;JUST RUN THE CODE
+### TL;DR. JUST RUN THE CODE
 <ul>
 <li>opencv-python==4.2.0
 <li>Pillow==7.1.2
