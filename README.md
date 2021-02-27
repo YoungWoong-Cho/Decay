@@ -2,8 +2,36 @@
 
 <strong>Before reading: Please refer to following [paper](https://arxiv.org/pdf/1703.10593.pdf) for more information about CycleGAN.</strong>
 
-<blockquote> Our project began with the question, <i>“what if inorganic things <u>‘decay’</u> like organic things?”</i> </blockquote>
+<blockquote> Our project began with the question, <i>“what if inorganic things <u>‘decay’</u> like organic things?”</i> </blockquote><br>
 
+### TL;JUST RUN THE CODE
+<ul>
+<li>opencv-python==4.2.0
+<li>Pillow==7.1.2
+<li>tensorflow==2.4.1
+<li>torch==1.7.0
+<li>torchvision==0.8.1
+</ul>
+Type in the following command:
+
+    python train.py
+
+If you want to train the model with your own model,
+
+    python train.py --dataset your2data --epochs 100 --decay_epochs 80
+
+If your device supports CUDA, it will be activated automatically. If you want to explicitly turn on CUDA,
+
+    python train.py --cuda
+
+After training, you can test your model using your custom input image. The images to be tested should be located under "./test".<br>
+To specify the model, use the following command:
+
+    python test.py --model weights/fruits2rotten/G_A2B.pth --cuda
+
+For help, type
+
+    python train.py --help
 ***Abstract—The importance of sustainable design is increasing. Through deep convolutional neural network, we imagined the world where everything is organic, and thus perishes.<br>
 A deep neural network was trained to predict the "decayed" appearance of an arbitrary input image.<br>
 A dataset that consists of several hundred images of fresh/rotten apples, oranges, and bananas were used to train the neural network.
