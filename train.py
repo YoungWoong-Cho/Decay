@@ -40,7 +40,7 @@ def main():
 
     # Cuda option
     if torch.cuda.is_available() and not args.cuda:
-        print("Cuda device foud. Turning on cuda...")
+        print("Cuda device found. Turning on cuda...")
         args.cuda = True
         time.sleep(0.2)
     device = torch.device("cuda:0" if args.cuda else "cpu")

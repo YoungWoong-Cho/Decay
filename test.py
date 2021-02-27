@@ -23,12 +23,16 @@ parser.add_argument('--cuda', action="store_true", help="Turn on the cuda option
 parser.add_argument('--image_size', type=int, default=256, help='Size of the image. Default: 256')
 args = parser.parse_args()
 
+# Random seed to initialize the random state
+seed = random.randint(1, 10000)
+torch.manual_seed(seed)
+print(f'Random Seed: {seed}')
 print('****Preparing training with following options****')
 time.sleep(0.2)
 
 # Cuda option
 if torch.cuda.is_available() and not args.cuda:
-    print("Cuda device foud. Turning on cuda...")
+    print("Cuda device found. Turning on cuda...")
     args.cuda = True
     time.sleep(0.2)
 device = torch.device("cuda:0" if args.cuda else "cpu")
@@ -56,13 +60,13 @@ model.eval()
 # Load image
 def translate(image_dir):
   image = Image.open(image_dir)
-  transform = transforms.Compose([
-    transforms.Resize(int(args.image_size), Image.BICUBIC),
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+  transform = transforms.Compose([transforms.Resize(args.image_size),
+                                  transforms.ToTensor(),
+                                  transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))])
   image = transform(image).unsqueeze(0)
   image = image.to(device)
-  return image
+  translated_image = model(image)
+  return translated_image
 
 
 print("Begin translation...", end='')
@@ -70,5 +74,5 @@ for image in os.listdir(args.data_root):
   if not image.startswith('translated_'):
     translated_filename = image[:image.find('.')]
     translated_image = translate(os.path.join(args.data_root, image))
-    save_image(translated_image, f'test/translated_{translated_filename}.png')
+    save_image(translated_image.detach(), f'test/translated_{translated_filename}.png', normalize=True)
 print("Done.")
