@@ -1,0 +1,9 @@
+keras==2.4.3
+numpy==1.19.2
+Pillow==7.1.2
+progressbar==2.5
+scipy==1.2.0
+tensorflow==2.4.1
+torch==1.7.0
+torchvision==0.8.1
+tqdm==4.46.1
