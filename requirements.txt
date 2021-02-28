@@ -1,7 +1,5 @@
-imageio==2.9.0
-opencv-python==4.2.0.34
+opencv-python==4.2.0
 Pillow==7.1.2
-progressbar==2.5
+tensorflow==2.4.1
 torch==1.7.0
 torchvision==0.8.1
-tqdm==4.46.1
