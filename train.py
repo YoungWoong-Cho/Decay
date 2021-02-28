@@ -1,7 +1,7 @@
 # Copyright 2021 by YoungWoon Cho, Danny Hong
 # The Cooper Union for the Advancement of Science and Art
 # ECE471 Machine Learning Architecture
-
+# https://www.geeksforgeeks.org/cycle-generative-adversarial-network-cyclegan-2/
 
 # Module dependencies 
 import argparse
@@ -17,271 +17,201 @@ import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
 
-from cyclegan_pytorch import DecayLR
-from cyclegan_pytorch import Discriminator
-from cyclegan_pytorch import Generator
-from cyclegan_pytorch import LoadDataset
-from cyclegan_pytorch import ReplayBuffer
-from cyclegan_pytorch import weights_init
+from optimization import QuadraticLR
+from models import *
+from datasets import LoadDataset
+from utils import ReplayBuffer
+from utils import weights_init
 
-import image_preprocessing as ip
-
-# Command-line parser
-parser = argparse.ArgumentParser(description="This is a pytorch implementation of CycleGAN. Please refer to the following arguments.")
-parser.add_argument('--batch_size', default=10, type=int, help='Size of a mini-batch. Default: 1')
-parser.add_argument('--cuda', action="store_true", help="Turn on the cuda option.")
-parser.add_argument('--dataset', type=str, default="fruit2rotten", help='Name of the dataset. Default: fruit2rotten)')
-parser.add_argument('--decay_epochs', type=int, default=80, help="epoch to start linearly decaying the learning rate to 0. Default: 80")
-parser.add_argument('--epochs', default=100, type=int, help="Number of epochs. Default: 100")
-parser.add_argument('--image_size', type=int, default=256, help='Size of the image. Default: 256')
-parser.add_argument('--input_root', type=str, default='./input', help='Root directory to the input dataset. Default: ./input')
-parser.add_argument('--learning_rate', type=float, default=0.0002, help='Learning rate. Default: 0.0002')
-parser.add_argument('--output_root', default='./output', help='Root directory to the output dataset. Default: ./output')
-parser.add_argument('--verbose_freq', default=100, type=int, help='Frequency of printing the information. Defatul: 100')
-args = parser.parse_args()
-print('****Preparing training with following options****')
-time.sleep(0.2)
-
-# Cuda option
-if torch.cuda.is_available() and not args.cuda:
-    print("Cuda device foud. Turning on cuda...")
-    args.cuda = True
+def main():
+    # Command-line parser
+    parser = argparse.ArgumentParser(description="This is a pytorch implementation of CycleGAN. Please refer to the following arguments.")
+    parser.add_argument('--batch_size', default=1, type=int, help='Size of a mini-batch. Default: 1')
+    parser.add_argument('--cuda', action="store_true", help="Turn on the cuda option.")
+    parser.add_argument('--data_root', type=str, default='./train', help='Root directory to the input dataset. Default: ./train')
+    parser.add_argument('--dataset', type=str, default="fruit2rotten", help='Name of the dataset. Default: fruit2rotten)')
+    parser.add_argument('--decay_epochs', type=int, default=80, help="epoch to start linearly decaying the learning rate to 0. Default: 80")
+    parser.add_argument('--epochs', default=100, type=int, help="Number of epochs. Default: 100")
+    parser.add_argument('--image_size', type=int, default=256, help='Size of the image. Default: 256')
+    parser.add_argument('--learning_rate', type=float, default=0.0002, help='Learning rate. Default: 0.0002')
+    args = parser.parse_args()
+    print('****Preparing training with following options****')
     time.sleep(0.2)
 
-# Random seed to initialize the random state
-seed = random.randint(1, 10000)
-torch.manual_seed(seed)
-print(f'Random Seed: {seed}')
+    # Cuda option
+    if torch.cuda.is_available() and not args.cuda:
+        print("Cuda device found. Turning on cuda...")
+        args.cuda = True
+        time.sleep(0.2)
+    device = torch.device("cuda:0" if args.cuda else "cpu")
 
-print(f'Batch size: {args.batch_size}')
-print(f'Cuda: {args.cuda}')
-print(f'Dataset: {args.dataset}')
-print(f'Decay epochs: {args.decay_epochs}')
-print(f'Epochs: {args.epochs}')
-print(f'Image size: {args.image_size}')
-print(f'Input root: {args.input_root}')
-print(f'Learning rate: {args.learning_rate}')
-print(f'Output root: {args.output_root}')
-print(f'Verbose frequency: {args.verbose_freq}')
-time.sleep(0.2)
+    # Random seed to initialize the random state
+    seed = random.randint(1, 10000)
+    torch.manual_seed(seed)
+    print(f'Random Seed: {seed}')
 
-# Create directory
-required_dir = [args.input_root, args.output_root]
-for dir in required_dir:
-    if not os.path.exists(dir):
-        print(f'Following director is not found: \'{dir}\'. Creating the directory...')
-        os.makedirs(dir)
+    print(f'Batch size: {args.batch_size}')
+    print(f'Cuda: {args.cuda}')
+    print(f'Data root: {args.data_root}')
+    print(f'Dataset: {args.dataset}')
+    print(f'Decay epochs: {args.decay_epochs}')
+    print(f'Epochs: {args.epochs}')
+    print(f'Image size: {args.image_size}')
+    print(f'Learning rate: {args.learning_rate}')
+    time.sleep(0.2)
 
-# Dataset
-dataset = LoadDataset(input_root=os.path.join(args.input_root, args.dataset),
-                       transform=transforms.Compose([
-                           transforms.Resize(int(args.image_size * 1.12), Image.BICUBIC),
-                           transforms.RandomCrop(args.image_size),
-                           transforms.RandomHorizontalFlip(),
-                           transforms.ToTensor(),
-                           transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]),
-                       unaligned=True)
+    # Create directory
+    try: os.makedirs(args.data_root)
+    except OSError: pass
 
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True)
+    # Weights
+    try: os.makedirs(os.path.join("weights", args.dataset))
+    except OSError: pass
 
-try:
-    os.makedirs(os.path.join(args.output_root, args.dataset, "A"))
-    os.makedirs(os.path.join(args.output_root, args.dataset, "B"))
-except OSError:
-    pass
+    # Load dataset
+    dataset = LoadDataset(data_root=os.path.join(args.data_root, args.dataset), img_size = args.image_size)
 
-try:
-    os.makedirs(os.path.join("weights", args.dataset))
-except OSError:
-    pass
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True)
 
-device = torch.device("cuda:0" if args.cuda else "cpu")
+    # Create models
+    G_A2B = Generator().to(device)
+    G_B2A = Generator().to(device)
+    D_A = Discriminator().to(device)
+    D_B = Discriminator().to(device)
 
-# create model
-netG_A2B = Generator().to(device)
-netG_B2A = Generator().to(device)
-netD_A = Discriminator().to(device)
-netD_B = Discriminator().to(device)
+    G_A2B.apply(weights_init)
+    G_B2A.apply(weights_init)
+    D_A.apply(weights_init)
+    D_B.apply(weights_init)
 
-netG_A2B.apply(weights_init)
-netG_B2A.apply(weights_init)
-netD_A.apply(weights_init)
-netD_B.apply(weights_init)
+    # Loss function
+    gan_loss = torch.nn.MSELoss().to(device)
+    cycle_loss = torch.nn.L1Loss().to(device)
+    identity_loss = torch.nn.L1Loss().to(device)
 
-if args.netG_A2B != "":
-    netG_A2B.load_state_dict(torch.load(args.netG_A2B))
-if args.netG_B2A != "":
-    netG_B2A.load_state_dict(torch.load(args.netG_B2A))
-if args.netD_A != "":
-    netD_A.load_state_dict(torch.load(args.netD_A))
-if args.netD_B != "":
-    netD_B.load_state_dict(torch.load(args.netD_B))
+    discriminator_losses = []
+    generator_losses = []
+    cycle_losses = []
+    gan_losses = []
+    identity_losses = []
 
-# define loss function (adversarial_loss) and optimizer
-cycle_loss = torch.nn.L1Loss().to(device)
-identity_loss = torch.nn.L1Loss().to(device)
-adversarial_loss = torch.nn.MSELoss().to(device)
+    # Optimizers
+    optimizer_G = torch.optim.Adam(itertools.chain(G_A2B.parameters(), G_B2A.parameters()), lr=args.learning_rate)
+    optimizer_D_A = torch.optim.Adam(D_A.parameters(), lr=args.learning_rate)
+    optimizer_D_B = torch.optim.Adam(D_B.parameters(), lr=args.learning_rate)
 
-# Optimizers
-optimizer_G = torch.optim.Adam(itertools.chain(netG_A2B.parameters(), netG_B2A.parameters()),
-                               lr=args.lr, betas=(0.5, 0.999))
-optimizer_D_A = torch.optim.Adam(netD_A.parameters(), lr=args.lr, betas=(0.5, 0.999))
-optimizer_D_B = torch.optim.Adam(netD_B.parameters(), lr=args.lr, betas=(0.5, 0.999))
+    # Learning rate schedulers that will implement quadratic decreasing of the learning rate
+    quadraticLR = QuadraticLR(args.epochs, 0, args.decay_epochs).step
+    lr_scheduler_G = torch.optim.lr_scheduler.LambdaLR(optimizer_G, lr_lambda=quadraticLR)
+    lr_scheduler_D_A = torch.optim.lr_scheduler.LambdaLR(optimizer_D_A, lr_lambda=quadraticLR)
+    lr_scheduler_D_B = torch.optim.lr_scheduler.LambdaLR(optimizer_D_B, lr_lambda=quadraticLR)
 
-lr_lambda = DecayLR(args.epochs, 0, args.decay_epochs).step
-lr_scheduler_G = torch.optim.lr_scheduler.LambdaLR(optimizer_G, lr_lambda=lr_lambda)
-lr_scheduler_D_A = torch.optim.lr_scheduler.LambdaLR(optimizer_D_A, lr_lambda=lr_lambda)
-lr_scheduler_D_B = torch.optim.lr_scheduler.LambdaLR(optimizer_D_B, lr_lambda=lr_lambda)
+    fake_A_buffer = ReplayBuffer()
+    fake_B_buffer = ReplayBuffer()
 
-g_losses = []
-d_losses = []
+    for epoch in range(0, args.epochs):
+        progress = tqdm(enumerate(dataloader), total=len(dataloader))
+        for i, data in progress:
+            # get batch size data
+            real_image_A = data["A"].to(device)
+            real_image_B = data["B"].to(device)
+            batch_size = real_image_A.size(0)
 
-identity_losses = []
-gan_losses = []
-cycle_losses = []
+            # Fake: 0, Real: 1
+            fake_label = torch.full((batch_size, 1), 0, device=device, dtype=torch.float32)
+            real_label = torch.full((batch_size, 1), 1, device=device, dtype=torch.float32)
 
-fake_A_buffer = ReplayBuffer()
-fake_B_buffer = ReplayBuffer()
+            #***********************
+            # 1. UPDATE GENERATORS *
+            #***********************
+            optimizer_G.zero_grad()
 
-for epoch in range(0, args.epochs):
-    progress_bar = tqdm(enumerate(dataloader), total=len(dataloader))
-    for i, data in progress_bar:
-        # get batch size data
-        real_image_A = data["A"].to(device)
-        real_image_B = data["B"].to(device)
-        batch_size = real_image_A.size(0)
+            # Identity loss
+            # A = G_B2A(A)
+            identity_image_A = G_B2A(real_image_A)
+            loss_identity_A = identity_loss(identity_image_A, real_image_A) * 5.0
+            # B = G_A2B(B)
+            identity_image_B = G_A2B(real_image_B)
+            loss_identity_B = identity_loss(identity_image_B, real_image_B) * 5.0
 
-        # real data label is 1, fake data label is 0.
-        real_label = torch.full((batch_size, 1), 1, device=device, dtype=torch.float32)
-        fake_label = torch.full((batch_size, 1), 0, device=device, dtype=torch.float32)
+            # GAN loss
+            # D_A(G_A(A))
+            fake_image_A = G_B2A(real_image_B)
+            fake_output_A = D_A(fake_image_A)
+            loss_GAN_B2A = gan_loss(fake_output_A, real_label)
+            # D_B(G_B(B))
+            fake_image_B = G_A2B(real_image_A)
+            fake_output_B = D_B(fake_image_B)
+            loss_GAN_A2B = gan_loss(fake_output_B, real_label)
 
-        ##############################################
-        # (1) Update G network: Generators A2B and B2A
-        ##############################################
+            # Cycle loss
+            recovered_image_A = G_B2A(fake_image_B)
+            loss_cycle_ABA = cycle_loss(recovered_image_A, real_image_A) * 10.0
 
-        # Set G_A and G_B's gradients to zero
-        optimizer_G.zero_grad()
+            recovered_image_B = G_A2B(fake_image_A)
+            loss_cycle_BAB = cycle_loss(recovered_image_B, real_image_B) * 10.0
 
-        # Identity loss
-        # G_B2A(A) should equal A if real A is fed
-        identity_image_A = netG_B2A(real_image_A)
-        loss_identity_A = identity_loss(identity_image_A, real_image_A) * 5.0
-        # G_A2B(B) should equal B if real B is fed
-        identity_image_B = netG_A2B(real_image_B)
-        loss_identity_B = identity_loss(identity_image_B, real_image_B) * 5.0
+            # Net loss
+            loss_G = loss_identity_A + loss_identity_B + loss_GAN_A2B + loss_GAN_B2A + loss_cycle_ABA + loss_cycle_BAB
 
-        # GAN loss
-        # GAN loss D_A(G_A(A))
-        fake_image_A = netG_B2A(real_image_B)
-        fake_output_A = netD_A(fake_image_A)
-        loss_GAN_B2A = adversarial_loss(fake_output_A, real_label)
-        # GAN loss D_B(G_B(B))
-        fake_image_B = netG_A2B(real_image_A)
-        fake_output_B = netD_B(fake_image_B)
-        loss_GAN_A2B = adversarial_loss(fake_output_B, real_label)
+            # Update Generator
+            loss_G.backward()
+            optimizer_G.step()
 
-        # Cycle loss
-        recovered_image_A = netG_B2A(fake_image_B)
-        loss_cycle_ABA = cycle_loss(recovered_image_A, real_image_A) * 10.0
+            #***************************
+            # 2. UPDATE DISCRIMINATORS *
+            #***************************
+            optimizer_D_A.zero_grad()
+            optimizer_D_B.zero_grad()
 
-        recovered_image_B = netG_A2B(fake_image_A)
-        loss_cycle_BAB = cycle_loss(recovered_image_B, real_image_B) * 10.0
+            # Real image loss
+            real_output_A = D_A(real_image_A)
+            loss_D_real_A = gan_loss(real_output_A, real_label)
 
-        # Combined loss and calculate gradients
-        errG = loss_identity_A + loss_identity_B + loss_GAN_A2B + loss_GAN_B2A + loss_cycle_ABA + loss_cycle_BAB
+            real_output_B = D_B(real_image_B)
+            loss_D_real_B = gan_loss(real_output_B, real_label)
 
-        # Calculate gradients for G_A and G_B
-        errG.backward()
-        # Update G_A and G_B's weights
-        optimizer_G.step()
+            # Fake image loss
+            fake_image_A = fake_A_buffer.push_and_pop(fake_image_A)
+            fake_output_A = D_A(fake_image_A.detach())
+            loss_D_fake_A = gan_loss(fake_output_A, fake_label)
 
-        ##############################################
-        # (2) Update D network: Discriminator A
-        ##############################################
+            fake_image_B = fake_B_buffer.push_and_pop(fake_image_B)
+            fake_output_B = D_B(fake_image_B.detach())
+            loss_D_fake_B = gan_loss(fake_output_B, fake_label)
 
-        # Set D_A gradients to zero
-        optimizer_D_A.zero_grad()
+            # Net loss
+            loss_D_A = (loss_D_real_A + loss_D_fake_A) / 2
+            loss_D_B = (loss_D_real_B + loss_D_fake_B) / 2
 
-        # Real A image loss
-        real_output_A = netD_A(real_image_A)
-        errD_real_A = adversarial_loss(real_output_A, real_label)
+            # Update Discriminator
+            loss_D_A.backward()
+            optimizer_D_A.step()
 
-        # Fake A image loss
-        fake_image_A = fake_A_buffer.push_and_pop(fake_image_A)
-        fake_output_A = netD_A(fake_image_A.detach())
-        errD_fake_A = adversarial_loss(fake_output_A, fake_label)
+            loss_D_B.backward()
+            optimizer_D_B.step()
 
-        # Combined loss and calculate gradients
-        errD_A = (errD_real_A + errD_fake_A) / 2
+            #*************
+            # 3. Verbose *
+            #*************
+            progress.set_description(
+                f"[{epoch}/{args.epochs - 1}][{i}/{len(dataloader) - 1}] "
+                f"Loss_D: {(loss_D_A + loss_D_B).item():.4f} "
+                f"Loss_G: {loss_G.item():.4f} "
+                f"Loss_G_identity: {(loss_identity_A + loss_identity_B).item():.4f} "
+                f"Loss_G_GAN: {(loss_GAN_A2B + loss_GAN_B2A).item():.4f} "
+                f"Loss_G_cycle: {(loss_cycle_ABA + loss_cycle_BAB).item():.4f}")
 
-        # Calculate gradients for D_A
-        errD_A.backward()
-        # Update D_A weights
-        optimizer_D_A.step()
+        # Update learning rates
+        lr_scheduler_G.step()
+        lr_scheduler_D_A.step()
+        lr_scheduler_D_B.step()
 
-        ##############################################
-        # (3) Update D network: Discriminator B
-        ##############################################
+    # save last check pointing
+    torch.save(G_A2B.state_dict(), f"weights/{args.dataset}/G_A2B.pth")
+    torch.save(G_B2A.state_dict(), f"weights/{args.dataset}/G_B2A.pth")
+    torch.save(D_A.state_dict(), f"weights/{args.dataset}/D_A.pth")
+    torch.save(D_B.state_dict(), f"weights/{args.dataset}/D_B.pth")
 
-        # Set D_B gradients to zero
-        optimizer_D_B.zero_grad()
-
-        # Real B image loss
-        real_output_B = netD_B(real_image_B)
-        errD_real_B = adversarial_loss(real_output_B, real_label)
-
-        # Fake B image loss
-        fake_image_B = fake_B_buffer.push_and_pop(fake_image_B)
-        fake_output_B = netD_B(fake_image_B.detach())
-        errD_fake_B = adversarial_loss(fake_output_B, fake_label)
-
-        # Combined loss and calculate gradients
-        errD_B = (errD_real_B + errD_fake_B) / 2
-
-        # Calculate gradients for D_B
-        errD_B.backward()
-        # Update D_B weights
-        optimizer_D_B.step()
-
-        progress_bar.set_description(
-            f"[{epoch}/{args.epochs - 1}][{i}/{len(dataloader) - 1}] "
-            f"Loss_D: {(errD_A + errD_B).item():.4f} "
-            f"Loss_G: {errG.item():.4f} "
-            f"Loss_G_identity: {(loss_identity_A + loss_identity_B).item():.4f} "
-            f"loss_G_GAN: {(loss_GAN_A2B + loss_GAN_B2A).item():.4f} "
-            f"loss_G_cycle: {(loss_cycle_ABA + loss_cycle_BAB).item():.4f}")
-
-        if i % args.print_freq == 0:
-            vutils.save_image(real_image_A,
-                              f"{args.output_root}/{args.dataset}/A/real_samples.png",
-                              normalize=True)
-            vutils.save_image(real_image_B,
-                              f"{args.output_root}/{args.dataset}/B/real_samples.png",
-                              normalize=True)
-
-            fake_image_A = 0.5 * (netG_B2A(real_image_B).data + 1.0)
-            fake_image_B = 0.5 * (netG_A2B(real_image_A).data + 1.0)
-
-            vutils.save_image(fake_image_A.detach(),
-                              f"{args.output_root}/{args.dataset}/A/fake_samples_epoch_{epoch}.png",
-                              normalize=True)
-            vutils.save_image(fake_image_B.detach(),
-                              f"{args.output_root}/{args.dataset}/B/fake_samples_epoch_{epoch}.png",
-                              normalize=True)
-
-    # do check pointing
-    torch.save(netG_A2B.state_dict(), f"weights/{args.dataset}/netG_A2B_epoch_{epoch}.pth")
-    torch.save(netG_B2A.state_dict(), f"weights/{args.dataset}/netG_B2A_epoch_{epoch}.pth")
-    torch.save(netD_A.state_dict(), f"weights/{args.dataset}/netD_A_epoch_{epoch}.pth")
-    torch.save(netD_B.state_dict(), f"weights/{args.dataset}/netD_B_epoch_{epoch}.pth")
-
-    # Update learning rates
-    lr_scheduler_G.step()
-    lr_scheduler_D_A.step()
-    lr_scheduler_D_B.step()
-
-# save last check pointing
-torch.save(netG_A2B.state_dict(), f"weights/{args.dataset}/netG_A2B.pth")
-torch.save(netG_B2A.state_dict(), f"weights/{args.dataset}/netG_B2A.pth")
-torch.save(netD_A.state_dict(), f"weights/{args.dataset}/netD_A.pth")
-torch.save(netD_B.state_dict(), f"weights/{args.dataset}/netD_B.pth")
+if __name__ == "__main__":
+    main()
