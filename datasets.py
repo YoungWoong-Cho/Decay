@@ -39,5 +39,4 @@ class LoadDataset(Dataset):
 
     # Finds and returns the length of the dataset with the larger size
     def __len__(self):
-        maximum_length = max(len(self.dataset_A), len(self.dataset_B)) 
-        return maximum_length
+        return max(len(self.datasetA), len(self.datasetB))
