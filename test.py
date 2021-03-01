@@ -52,7 +52,10 @@ time.sleep(0.2)
 model = Generator().to(device)
 
 # Load state dicts
-model.load_state_dict(torch.load(args.model))
+if args.cuda == True:
+    model.load_state_dict(torch.load(args.model))
+else:
+    model.load_state_dict(torch.load(args.model, map_location=torch.device('cpu')))
 
 # Set model mode
 model.eval()
