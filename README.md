@@ -32,7 +32,7 @@ To specify the model, use the following command:
 For real-time webcam translation,
 
     python webcam_translation.py
-The model is set to be weights/fruit2rotten/G_A2B.pth by default.
+The model is set to be weights/fruit2rotten/G_A2B.pth by default. User input for the webcam configuration is not yet supported; it must be directly modified from the python script file.
 
 For help, type
 
