@@ -29,6 +29,11 @@ To specify the model, use the following command:
 
     python test.py --model weights/fruits2rotten/G_A2B.pth --cuda
 
+For real-time webcam translation,
+
+    python webcam_translation.py
+The model is set to be weights/fruit2rotten/G_A2B.pth by default.
+
 For help, type
 
     python train.py --help
